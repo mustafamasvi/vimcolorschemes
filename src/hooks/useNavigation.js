@@ -61,6 +61,8 @@ const handleKeyPress = (event, focusables, defaultSection) => {
 
   const { activeElement } = document;
 
+  if (activeElement.tagName === "INPUT") return;
+
   const currentTabIndex = Array.prototype.indexOf.call(
     focusables,
     activeElement,

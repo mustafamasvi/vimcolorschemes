@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import React, { useRef, useState, useEffect } from "react";
 
 import { SECTIONS, LAYOUTS } from "src/constants";
 
@@ -19,11 +19,15 @@ const SEARCH_LABELS = {
   },
 };
 
-const SearchInput = ({ value, onChange, onFocusChange }) => {
+const SearchInput = ({ value, onChange, onFocusChange, isSearchPage }) => {
   const [label, setLabel] = useState(SEARCH_LABELS.DEFAULT);
 
   const searchInputWrapperRef = useRef();
   const searchInputRef = useRef();
+
+  useEffect(() => {
+    if (isSearchPage && searchInputRef.current) searchInputRef.current.focus();
+  }, [isSearchPage, searchInputRef]);
 
   useEventListener("keydown", event => {
     if (

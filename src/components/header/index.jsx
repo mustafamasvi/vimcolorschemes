@@ -1,4 +1,5 @@
-import React from "react";
+import React, { useRef, useEffect } from "react";
+import { navigate } from "gatsby";
 import PropTypes from "prop-types";
 
 import { LAYOUTS, SECTIONS } from "src/constants";

@@ -1,14 +1,12 @@
-import React, { useState, useEffect, useMemo } from "react";
-import { graphql } from "gatsby";
+import React from "react";
+import { graphql, navigate } from "gatsby";
 import PropTypes from "prop-types";
-import * as JsSearch from "js-search";
 
 import { RepositoryType } from "src/types";
 
-import { ACTIONS, SECTIONS } from "src/constants";
+import { ACTIONS, SECTIONS, REPOSITORY_COUNT_PER_PAGE } from "src/constants";
 
 import { useNavigation } from "src/hooks/useNavigation";
-import { useDebounce } from "src/hooks/useDebounce";
 
 import Actions from "src/components/actions";
 import Card from "src/components/card";
@@ -17,36 +15,16 @@ import Intro from "src/components/intro";
 import Layout from "src/components/layout";
 import SEO from "src/components/seo";
 import Pagination from "src/components/pagination";
-import SearchInput from "../../components/searchInput";
+import SearchInput from "src/components/searchInput";
 
 import "./index.scss";
-
-const createSearchData = repositories => {
-  const data = new JsSearch.Search("id");
-  data.indexStrategy = new JsSearch.PrefixIndexStrategy();
-  data.sanitizer = new JsSearch.LowerCaseSanitizer();
-  data.searchIndex = new JsSearch.TfIdfSearchIndex("id");
-  data.addIndex("name");
-  data.addIndex(["owner", "name"]);
-  data.addIndex("description");
-  data.addDocuments(repositories);
-  return data;
-};
 
 const RepositoriesPage = ({ data, pageContext, location }) => {
   const { totalCount, repositories } = data?.repositoriesData;
   const {
     siteMetadata: { platform },
   } = data?.site;
-  const { currentPage, pageCount, skip, limit } = pageContext;
-
-  const pageRepositories = useMemo(
-    () => repositories.slice(skip, skip + limit),
-    [repositories, skip, limit],
-  );
-  const searchData = useMemo(() => createSearchData(repositories), [
-    repositories,
-  ]);
+  const { currentPage, pageCount } = pageContext;
 
   const currentPath = location.pathname || "";
   const activeAction =
@@ -55,41 +33,13 @@ const RepositoriesPage = ({ data, pageContext, location }) => {
         currentPath.includes(action.route) && action !== ACTIONS.TRENDING,
     ) || ACTIONS.TRENDING;
 
-  const [searchInput, setSearchInput] = useState(null);
-  const [isSearchInputFocused, setIsSearchInputFocused] = useState(false);
+  useNavigation(SECTIONS.REPOSITORIES);
 
-  const [filterData, setFilterData] = useState({
-    searchInput: null,
-    repositories: pageRepositories,
-  });
-
-  filterData.searchInput = useDebounce(searchInput, 200);
-
-  const [resetNavigation, disableNavigation] = useNavigation(
-    SECTIONS.REPOSITORIES,
-  );
-
-  useEffect(() => {
-    if (filterData.searchInput)
-      setFilterData(data => ({
-        ...data,
-        repositories: searchData.search(filterData.searchInput),
-      }));
-    else if (filterData.searchInput !== null)
-      setFilterData(data => ({
-        ...data,
-        repositories: pageRepositories,
-      }));
-  }, [filterData.searchInput, searchData, pageRepositories]);
-
-  useEffect(() => {
-    if (
-      !isSearchInputFocused &&
-      filterData.searchInput !== null &&
-      filterData.searchInput === searchInput
-    )
-      resetNavigation();
-  }, [filterData, isSearchInputFocused, resetNavigation, searchInput]);
+  const startIndex = (currentPage - 1) * REPOSITORY_COUNT_PER_PAGE + 1;
+  const endIndex =
+    currentPage === pageCount
+      ? totalCount
+      : currentPage * REPOSITORY_COUNT_PER_PAGE;
 
   return (
     <Layout isHome>
@@ -97,30 +47,19 @@ const RepositoriesPage = ({ data, pageContext, location }) => {
       <Intro />
       <div className="action-row">
         <SearchInput
-          value={searchInput || ""}
-          onChange={event => setSearchInput(event.target.value)}
           onFocusChange={isFocused => {
-            if (isFocused) disableNavigation();
-            setIsSearchInputFocused(isFocused);
+            if (isFocused) navigate("/search");
           }}
         />
         <Actions actions={Object.values(ACTIONS)} activeAction={activeAction} />
       </div>
-      {!!filterData.searchInput ? (
-        <p>
-          <strong>{filterData.repositories.length}</strong> result
-          {filterData.repositories.length !== 1 ? "s" : ""} for "
-          {filterData.searchInput}"
-        </p>
-      ) : (
-        <p>
-          {skip + 1}
-          {" - "}
-          {limit} out of <strong>{totalCount}</strong> repositories
-        </p>
-      )}
+      <p>
+        {startIndex}
+        {" - "}
+        {endIndex} out of <strong>{totalCount}</strong> repositories
+      </p>
       <Grid className="repositories">
-        {filterData.repositories.map(repository => (
+        {repositories.map(repository => (
           <Card
             key={`repository-${repository.owner.name}-${repository.name}`}
             linkState={{ fromPath: currentPath }}
@@ -128,13 +67,11 @@ const RepositoriesPage = ({ data, pageContext, location }) => {
           />
         ))}
       </Grid>
-      {!filterData.searchInput && (
-        <Pagination
-          currentPage={currentPage}
-          pageCount={pageCount}
-          activeActionRoute={activeAction.route}
-        />
-      )}
+      <Pagination
+        currentPage={currentPage}
+        pageCount={pageCount}
+        activeActionRoute={activeAction.route}
+      />
     </Layout>
   );
 };
@@ -161,6 +98,8 @@ RepositoriesPage.propTypes = {
 
 export const query = graphql`
   query(
+    $skip: Int!
+    $limit: Int!
     $sortField: [mongodbColorschemesRepositoriesFieldsEnum]!
     $sortOrder: [SortOrderEnum]!
   ) {
@@ -172,10 +111,11 @@ export const query = graphql`
     repositoriesData: allMongodbColorschemesRepositories(
       filter: { valid: { eq: true }, image_urls: { ne: "" } }
       sort: { fields: $sortField, order: $sortOrder }
+      limit: $limit
+      skip: $skip
     ) {
       totalCount
       repositories: nodes {
-        id
         name
         description
         stargazersCount: stargazers_count
